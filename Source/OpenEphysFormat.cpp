@@ -29,6 +29,7 @@ OpenEphysFormat::OpenEphysFormat() :
 	recordingNumber(0), 
 	experimentNumber(0), 
 	zeroBuffer(1, 50000),
+    zeroBufferDouble(1, 50000),
 	eventFile(nullptr), 
 	messageFile(nullptr), 
 	lastProcId(0), 
@@ -45,19 +46,11 @@ OpenEphysFormat::OpenEphysFormat() :
 	recordMarker[9] = 255;
 
 	zeroBuffer.clear();
+    zeroBufferDouble.clear();
 }
 	
 OpenEphysFormat::~OpenEphysFormat()
 {
-
-	for (int i = 0; i < fileArray.size(); i++)
-	{
-		if (fileArray[i] != nullptr) fclose(fileArray[i]);
-	}
-	for (int i = 0; i < spikeFileArray.size(); i++)
-	{
-		if (spikeFileArray[i] != nullptr) fclose(spikeFileArray[i]);
-	}
 }
 
 
@@ -78,6 +71,8 @@ String OpenEphysFormat::getEngineId() const
 void OpenEphysFormat::openFiles(File rootFolder, int experimentNumber, int recordingNumber)
 {
 	fileArray.clear();
+    timestampFileArray.clear();
+    firstChannelsInStream.clear();
 	spikeFileArray.clear();
 	blockIndex.clear();
 	processorArray.clear();
@@ -94,12 +89,22 @@ void OpenEphysFormat::openFiles(File rootFolder, int experimentNumber, int recor
 	openFile(rootFolder, getEventChannel(0), 0);
 
 	openMessageFile(rootFolder);
+    
+    uint16 activeStreamId = 0;
 
 	int nChannels = getNumRecordedContinuousChannels();
 
 	for (int i = 0; i < nChannels; i++)
 	{
 		const ContinuousChannel* ch = getContinuousChannel(getRealChannel(i));
+        
+        if (ch->getStreamId() != activeStreamId)
+        {
+            firstChannelsInStream.add(ch);
+            openTimestampFile(rootFolder, ch);
+            activeStreamId = ch->getStreamId();
+        }
+            
 		openFile(rootFolder, ch, getRealChannel(i));
 		blockIndex.add(0);
 		samplesSinceLastTimestamp.add(0);
@@ -112,6 +117,35 @@ void OpenEphysFormat::openFiles(File rootFolder, int experimentNumber, int recor
 		spikeFileArray.add(nullptr);
 		openSpikeFile(rootFolder, getSpikeChannel(i), i);
 	}
+}
+
+void OpenEphysFormat::openTimestampFile(File rootFolder, const ChannelInfoObject *channel)
+{
+    FILE* tsFile;
+    
+    String filename = rootFolder.getFullPathName() + rootFolder.getSeparatorString();
+    
+    filename += String(channel->getSourceNodeId());
+    filename += "_";
+
+    // need to indicate stream somehow
+    filename += String(channel->getStreamName().removeCharacters(" ").replaceCharacter('_','-'));
+    filename += ".timestamps";
+    
+    LOGD("OPENING FILE: ", filename);
+
+    File f = File(filename);
+
+    bool fileExists = f.exists();
+
+    diskWriteLock.enter();
+
+    tsFile = fopen(filename.toUTF8(), "ab");
+    timestampFileArray.add(tsFile);
+    
+    diskWriteLock.exit();
+    
+    
 }
 
 
@@ -298,7 +332,9 @@ void OpenEphysFormat::closeFiles()
 			if (blockIndex[i] < BLOCK_LENGTH)
 			{
 				// fill out the rest of the current buffer
-				writeContinuousBuffer(zeroBuffer.getReadPointer(0), BLOCK_LENGTH - blockIndex[i], i);
+				writeContinuousBuffer(zeroBuffer.getReadPointer(0),
+                                      zeroBufferDouble.getReadPointer(0),
+                                      BLOCK_LENGTH - blockIndex[i], i);
 				diskWriteLock.enter();
 				fclose(fileArray[i]);
 				diskWriteLock.exit();
@@ -309,7 +345,19 @@ void OpenEphysFormat::closeFiles()
 
 	blockIndex.clear();
 	samplesSinceLastTimestamp.clear();
-	for (int i = 0; i < spikeFileArray.size(); i++)
+    
+    for (int i = 0; i < timestampFileArray.size(); i++)
+    {
+        if (timestampFileArray[i] != nullptr)
+        {
+            diskWriteLock.enter();
+            fclose(timestampFileArray[i]);
+            timestampFileArray.set(i, nullptr);
+            diskWriteLock.exit();
+        }
+    }
+	
+    for (int i = 0; i < spikeFileArray.size(); i++)
 	{
 		if (spikeFileArray[i] != nullptr)
 		{
@@ -319,7 +367,8 @@ void OpenEphysFormat::closeFiles()
 			diskWriteLock.exit();
 		}
 	}
-	if (eventFile != nullptr)
+	
+    if (eventFile != nullptr)
 	{
 		diskWriteLock.enter();
 		fclose(eventFile);
@@ -338,10 +387,10 @@ void OpenEphysFormat::closeFiles()
 }
 
 void OpenEphysFormat::writeContinuousData(int writeChannel, 
-											   int realChannel, 
-											   const float* buffer, 
-											   const double* ftsBuffer, 
-											   int size)
+                                           int realChannel,
+                                           const float* buffer,
+                                           const double* timestampBuffer,
+                                           int size)
 {
 	int samplesWritten = 0;
 
@@ -358,6 +407,7 @@ void OpenEphysFormat::writeContinuousData(int writeChannel,
 
 			// write buffer to disk!
 			writeContinuousBuffer(buffer + samplesWritten,
+                timestampBuffer + samplesWritten,
 				numSamplesToWrite,
 				writeChannel);
 
@@ -373,6 +423,7 @@ void OpenEphysFormat::writeContinuousData(int writeChannel,
 
 			// write buffer to disk!
 			writeContinuousBuffer(buffer + samplesWritten,
+                timestampBuffer + samplesWritten,
 				numSamplesToWrite,
 				writeChannel);
 
@@ -529,14 +580,15 @@ void OpenEphysFormat::writeTTLEvent(int eventIndex, const EventPacket& packet)
 
 
 
-void OpenEphysFormat::writeContinuousBuffer(const float* data, int nSamples, int writeChannel)
+void OpenEphysFormat::writeContinuousBuffer(const float* data, const double* timestamps, int nSamples, int writeChannel)
 {
 	// check to see if the file exists
 	if (fileArray[writeChannel] == nullptr)
 		return;
 
 	// scale the data back into the range of int16
-	float scaleFactor = float(0x7fff) * getContinuousChannel(getRealChannel(writeChannel))->getBitVolts();
+    const ContinuousChannel* ch = getContinuousChannel(getRealChannel(writeChannel));
+	float scaleFactor = float(0x7fff) * ch->getBitVolts();
 
 	for (int n = 0; n < nSamples; n++)
 	{
@@ -566,7 +618,27 @@ void OpenEphysFormat::writeContinuousBuffer(const float* data, int nSamples, int
 	if (blockIndex[writeChannel] + nSamples == BLOCK_LENGTH)
 	{
 		writeRecordMarker(fileArray[writeChannel]);
+        
+        int index = firstChannelsInStream.indexOf(ch);
+        
+        if (index > -1)
+        {
+            writeSynchronizedTimestamp(timestampFileArray[index], timestamps + nSamples);
+        }
 	}
+}
+
+void OpenEphysFormat::writeSynchronizedTimestamp(FILE* file, const double* ts)
+{
+    
+    diskWriteLock.enter();
+    
+    fwrite(ts,         // ptr
+        8,              // size of each element
+        1,              // count
+        file);          // ptr to FILE object
+    
+    diskWriteLock.exit();
 }
 
 void OpenEphysFormat::writeTimestampAndSampleCount(FILE* file, int channel)
@@ -617,7 +689,7 @@ void OpenEphysFormat::writeXml()
 		name += "_";
 		name += String(experimentNumber);
 	}
-	name += ".xml";
+	name += ".openephys";
 
 	File file(name);
 	XmlDocument doc(file);

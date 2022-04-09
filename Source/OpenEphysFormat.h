@@ -39,7 +39,7 @@ public:
 	OpenEphysFormat();
 	
 	/** Destructor */
-	~OpenEphysFormat();
+    ~OpenEphysFormat();
 
 	/** Launches the manager for this Record Engine, and instantiates any parameters */
 	static RecordEngineManager* getEngineManager();
@@ -57,7 +57,7 @@ public:
 	void writeContinuousData(int writeChannel, 
 						       int realChannel, 
 							   const float* dataBuffer, 
-							   const double* ftsBuffer, 
+							   const double* timestampBuffer, 
 							   int size);
 
 	/** Write a single event to disk (TTL or TEXT) */
@@ -81,6 +81,9 @@ private:
 
 	/** Opens a file for writing */
 	void openFile(File rootFolder, const ChannelInfoObject* ch, int channelIndex);
+    
+    /** Opens a spike file for writing */
+    void openTimestampFile(File rootFolder, const ChannelInfoObject* channel);
 
 	/** Opens a spike file for writing */
 	void openSpikeFile(File rootFolder, const SpikeChannel* elec, int channelIndex);
@@ -89,10 +92,13 @@ private:
 	void openMessageFile(File rootFolder);
 	
 	/** Writes a block of continuous data*/
-	void writeContinuousBuffer(const float* data, int nSamples, int channel);
+    void writeContinuousBuffer(const float* data, const double* timestamps, int nSamples, int channel);
 
 	/** Writes the timestamp sync texts info */
 	void writeTimestampAndSampleCount(FILE* file, int channel);
+    
+    /** Writes the synchronized timestamp for one stream / block combo */
+    void writeSynchronizedTimestamp(FILE* file, const double* ts);
 
 	/** Write a 10-byte marker indicating the end of a record */
 	void writeRecordMarker(FILE* file);
@@ -121,10 +127,13 @@ private:
 	HeapBlock<uint8> recordMarker;
 
 	AudioBuffer<float> zeroBuffer;
+    AudioBuffer<double> zeroBufferDouble;
 
 	FILE* eventFile;
 	FILE* messageFile;
 	Array<FILE*> fileArray;
+    Array<FILE*> timestampFileArray;
+    Array<const ContinuousChannel*> firstChannelsInStream;
 	Array<FILE*> spikeFileArray;
 
 	CriticalSection diskWriteLock;

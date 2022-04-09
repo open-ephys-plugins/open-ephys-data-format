@@ -23,6 +23,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <PluginInfo.h>
 
 #include "OpenEphysFormat.h"
+#include "OpenEphysFileSource.h"
 
 #include <string>
 
@@ -35,7 +36,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 using namespace Plugin;
 
-#define NUM_PLUGINS 1 // Number of Record Engines included
+#define NUM_PLUGINS 2 // Number of Record Engines included
 
 extern "C" EXPORT void getLibInfo(Plugin::LibraryInfo* info)
 {
@@ -58,6 +59,14 @@ extern "C" EXPORT int getPluginInfo(int index, Plugin::PluginInfo* info)
 		info->recordEngine.name = "Open Ephys"; 
 		info->recordEngine.creator = &(Plugin::createRecordEngine<OpenEphysFormat>);
 		break;
+            
+    case 1:
+
+        info->type = Plugin::Type::FILE_SOURCE;
+        info->fileSource.name = "Open Ephys Format";
+        info->fileSource.creator = &(Plugin::createFileSource<OpenEphysFileSource>);
+        info->fileSource.extensions = "openephys";
+        break;
 
 	default:
 		return -1;
