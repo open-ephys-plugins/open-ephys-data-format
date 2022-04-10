@@ -716,6 +716,13 @@ void OpenEphysFormat::writeContinuousBuffer(const float* data, const double* tim
 	if (blockIndex[writeChannel] == 0)
 	{
 		writeTimestampAndSampleCount(fileArray[writeChannel], writeChannel);
+        
+        int index = firstChannelsInStream.indexOf(ch);
+        
+        if (index > -1)
+        {
+            writeSynchronizedTimestamp(timestampFileArray[index], timestamps);
+        }
 	}
 
 	diskWriteLock.enter();
@@ -735,13 +742,6 @@ void OpenEphysFormat::writeContinuousBuffer(const float* data, const double* tim
 	if (blockIndex[writeChannel] + nSamples == BLOCK_LENGTH)
 	{
 		writeRecordMarker(fileArray[writeChannel]);
-        
-        int index = firstChannelsInStream.indexOf(ch);
-        
-        if (index > -1)
-        {
-            writeSynchronizedTimestamp(timestampFileArray[index], timestamps + nSamples);
-        }
 	}
 }
 
