@@ -171,33 +171,29 @@ void OpenEphysFormat::openFiles(File rootFolder, int experimentNumber, int recor
         c->num_samples = ch->getTotalSamples();
         c->num_channels = ch->getNumChannels();
         
-        if (ch->getStreamId() != activeStreamId)
+        activeStreamId = ch->getStreamId();
+
+        bool streamExists = false;
+        
+        for (auto streamInfo : streamInfoArray)
         {
-            activeStreamId = ch->getStreamId();
-
-            bool streamExists = false;
-            
-            for (auto streamInfo : streamInfoArray)
+            if (streamInfo->streamId == activeStreamId)
             {
-                if (streamInfo->streamId == activeStreamId)
-                {
-                    streamInfo->spikeChannels.add(c);
-                    streamExists = true;
-                    break;
-                }
+                streamInfo->spikeChannels.add(c);
+                streamExists = true;
+                break;
             }
-            
-            if (!streamExists)
-            {
-                StreamInfo* info = new StreamInfo();
-                info->sourceNodeId = ch->getSourceNodeId();
-                info->name = ch->getStreamName();
-                info->sampleRate = ch->getSampleRate();
-                info->sourceNodeName = ch->getSourceNodeName();
-                info->spikeChannels.add(c);
-                streamInfoArray.add(info);
-            }
-
+        }
+        
+        if (!streamExists)
+        {
+            StreamInfo* info = new StreamInfo();
+            info->sourceNodeId = ch->getSourceNodeId();
+            info->name = ch->getStreamName();
+            info->sampleRate = ch->getSampleRate();
+            info->sourceNodeName = ch->getSourceNodeName();
+            info->spikeChannels.add(c);
+            streamInfoArray.add(info);
         }
 	}
 }
@@ -213,7 +209,8 @@ String OpenEphysFormat::openTimestampFile(File rootFolder, const ChannelInfoObje
 
     // need to indicate stream somehow
     filename += String(channel->getStreamName().removeCharacters(" ").replaceCharacter('_','-'));
-    filename += "_" + String(experimentNumber);
+    if (experimentNumber > 1)
+        filename += "_" + String(experimentNumber);
     filename += ".timestamps";
     
     String fullpath = basePath + filename;
@@ -250,7 +247,8 @@ String OpenEphysFormat::openEventFile(File rootFolder, const ChannelInfoObject* 
 
     // need to indicate stream somehow
     filename += String(channel->getStreamName().removeCharacters(" ").replaceCharacter('_','-'));
-    filename += "_" + String(experimentNumber);
+    if (experimentNumber > 1)
+        filename += "_" + String(experimentNumber);
     filename += ".events";
     
     String fullPath = basePath + filename;
@@ -345,7 +343,6 @@ String OpenEphysFormat::openSpikeFile(File rootFolder, const SpikeChannel* elec,
 
 	// need to indicate stream somehow
     filename += String(elec->getStreamName().removeCharacters(" ").replaceCharacter('_', '-'));
-    filename += "_";
 
 	if (experimentNumber > 1)
 	{
@@ -558,7 +555,7 @@ void OpenEphysFormat::writeEvent(int eventChannel, const EventPacket& event)
 	{
 		TextEventPtr ev = TextEvent::deserialize(event, getEventChannel(eventChannel));
 		if (ev == nullptr) return;
-		writeMessage(ev->getText(), ev->getProcessorId(), ev->getTimestamp());
+		writeMessage(ev->getText(), ev->getProcessorId(), ev->getSampleNumber());
     } else {
         
         const EventChannel* info = getEventChannel(eventChannel);
@@ -586,7 +583,7 @@ void OpenEphysFormat::writeSpike(int electrodeIndex, const Spike* spike)
 		42;							    // 42, from SpikeObject.h
 	spikeBuffer.malloc(totalBytes);
 	*(spikeBuffer.getData()) = static_cast<char>(channel->getChannelType());
-	*reinterpret_cast<int64*>(spikeBuffer.getData() + 1) = spike->getTimestamp();
+	*reinterpret_cast<int64*>(spikeBuffer.getData() + 1) = spike->getSampleNumber();
 	*reinterpret_cast<int64*>(spikeBuffer.getData() + 9) = 0; //Legacy unused value
 	*reinterpret_cast<uint16*>(spikeBuffer.getData() + 17) = spike->getProcessorId();
 	*reinterpret_cast<uint16*>(spikeBuffer.getData() + 19) = numChannels;
@@ -678,7 +675,7 @@ void OpenEphysFormat::writeTTLEvent(const EventChannel* info, const EventPacket&
 
 	EventPtr ev = Event::deserialize(packet, info);
 	if (!ev) return;
-	*reinterpret_cast<int64*>(data) = ev->getTimestamp();
+	*reinterpret_cast<int64*>(data) = ev->getSampleNumber();
 	*reinterpret_cast<int16*>(data + 8) = samplePos;
 	*(data + 10) = static_cast<uint8>(ev->getEventType());
 	*(data + 11) = static_cast<uint8>(ev->getProcessorId());
@@ -805,7 +802,7 @@ void OpenEphysFormat::writeXml()
 	
     if (experimentNumber > 1)
 	{
-		name += String(experimentNumber);
+		name += "_" + String(experimentNumber);
 	}
 	name += ".openephys";
 
