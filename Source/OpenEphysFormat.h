@@ -40,12 +40,12 @@ public:
 	
 	/** Destructor */
     ~OpenEphysFormat();
+    
+    /** Returns a string that can be used to identify this record engine*/
+    String getEngineId() const;
 
 	/** Launches the manager for this Record Engine, and instantiates any parameters */
 	static RecordEngineManager* getEngineManager();
-
-	/** Returns a string that can be used to identify this record engine*/
-	String getEngineId() const;
 
 	/** Called when recording starts to open all needed files */
 	void openFiles(File rootFolder, int experimentNumber, int recordingNumber);
@@ -55,38 +55,42 @@ public:
 
 	/** Write continuous data for a channel, including synchronized float timestamps for each sample */
 	void writeContinuousData(int writeChannel, 
-						       int realChannel, 
-							   const float* dataBuffer, 
-							   const double* timestampBuffer, 
-							   int size);
+       int realChannel,
+       const float* dataBuffer,
+       const double* timestampBuffer,
+       int size);
 
 	/** Write a single event to disk (TTL or TEXT) */
-	void writeEvent(int eventChannel, 
-				    const EventPacket& event);
+	void writeEvent(int eventChannel, const EventPacket& event);
 
 	/** Write a spike to disk */
-	void writeSpike(int electrodeIndex,
-		const Spike* spike);
+	void writeSpike(int electrodeIndex, const Spike* spike);
 
 	/** Write the timestamp sync text messages to disk*/
 	void writeTimestampSyncText(uint64 streamId, 
 								int64 timestamp, 
 								float sourceSampleRate, 
 								String text);
+    
+    /** Sets an engine parameter (in this case TTL word writing bool) */
+    void setParameter(EngineParameter& parameter);
 
 private:
 
 	/** Generates the name for a continuous data file, given its channel index*/
 	String getFileName(int channelIndex);
 
-	/** Opens a file for writing */
-	void openFile(File rootFolder, const ChannelInfoObject* ch, int channelIndex);
+	/** Opens a continuous channel file for writing */
+	String openContinuousFile(File rootFolder, const ChannelInfoObject* ch, int channelIndex);
+    
+    /** Opens an event file for writing */
+    String openEventFile(File rootFolder, const ChannelInfoObject* ch);
     
     /** Opens a spike file for writing */
-    void openTimestampFile(File rootFolder, const ChannelInfoObject* channel);
+    String openTimestampFile(File rootFolder, const ChannelInfoObject* channel);
 
 	/** Opens a spike file for writing */
-	void openSpikeFile(File rootFolder, const SpikeChannel* elec, int channelIndex);
+	String openSpikeFile(File rootFolder, const SpikeChannel* elec, int channelIndex);
 
 	/** Opens messages.events for writing */
 	void openMessageFile(File rootFolder);
@@ -104,7 +108,7 @@ private:
 	void writeRecordMarker(FILE* file);
 
 	/** Writes a TTL event from an EventPacket */
-	void writeTTLEvent(int eventIndex, const EventPacket& packet);
+	void writeTTLEvent(const EventChannel* info, const EventPacket& packet);
 
 	/** Writes a TEXT event to messages.events*/
 	void writeMessage(String message, uint16 processorID, int64 timestamp);
@@ -126,18 +130,46 @@ private:
 	/** Used to indicate the end of each record */
 	HeapBlock<uint8> recordMarker;
 
+    /** Stores zeros to pad the final block of data */
 	AudioBuffer<float> zeroBuffer;
     AudioBuffer<double> zeroBufferDouble;
 
-	FILE* eventFile;
+    /** Global message file */
 	FILE* messageFile;
+    
+    /** Array of continuous channel files (one per recorded channel) */
 	Array<FILE*> fileArray;
+    
+    /** Array of event channel files (one per stream) */
+    Array<FILE*> eventFileArray;
+    
+    /** Array of timestamps files (one per stream) */
     Array<FILE*> timestampFileArray;
+    
+    /** Pointer to first channel in each stream */
     Array<const ContinuousChannel*> firstChannelsInStream;
+    
+    /** Map between stream IDs and event files*/
+    std::map<uint16, FILE*> eventFileMap;
+    
+    /** Array of spike channel files (one per spike channel) */
 	Array<FILE*> spikeFileArray;
 
+    /** Mutex for disk writing*/
 	CriticalSection diskWriteLock;
+    
+    /** Stores info about a spike channel (written to XML)*/
+    struct SpikeChannelInfo
+    {
+        String filename;
+        String name;
+        int num_channels;
+        int num_samples;
+        float bitVolts;
+        long int startPos;
+    };
 
+    /** Stores info about a continuous channel (written to XML)*/
 	struct ChannelInfo
 	{
 		String name;
@@ -145,19 +177,26 @@ private:
 		float bitVolts;
 		long int startPos;
 	};
-	struct ProcInfo
+    
+    /** Stores info about a data stream (written to XML) */
+	struct StreamInfo
 	{
-		int id;
+        uint16 streamId;
+        String eventFileName;
+        String timestampFileName;
+        String name;
+        int sourceNodeId;
+        String sourceNodeName;
 		float sampleRate;
 		OwnedArray<ChannelInfo> channels;
+        OwnedArray<SpikeChannelInfo> spikeChannels;
 	};
 
-	OwnedArray<ProcInfo> processorArray;
-	int lastProcId;
+    /** Holds metadata for XML file*/
+	OwnedArray<StreamInfo> streamInfoArray;
+    
+    /** Full path of the recording base directory */
 	String recordPath;
-	int64 startTimestamp;
-	int procIndex;
-	Array<int> originalChannelIndexes;
 
 	JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(OpenEphysFormat);
 };

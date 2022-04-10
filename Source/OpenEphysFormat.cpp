@@ -30,10 +30,7 @@ OpenEphysFormat::OpenEphysFormat() :
 	experimentNumber(0), 
 	zeroBuffer(1, 50000),
     zeroBufferDouble(1, 50000),
-	eventFile(nullptr), 
-	messageFile(nullptr), 
-	lastProcId(0), 
-	procIndex(0)
+	messageFile(nullptr)
 { 
 	continuousDataIntegerBuffer.malloc(10000);
 	continuousDataFloatBuffer.malloc(10000);
@@ -72,107 +69,236 @@ void OpenEphysFormat::openFiles(File rootFolder, int experimentNumber, int recor
 {
 	fileArray.clear();
     timestampFileArray.clear();
+    eventFileArray.clear();
+    eventFileMap.clear();
     firstChannelsInStream.clear();
 	spikeFileArray.clear();
 	blockIndex.clear();
-	processorArray.clear();
+    streamInfoArray.clear();
 	samplesSinceLastTimestamp.clear();
-	originalChannelIndexes.clear();
-	procIndex = 0;
 
+    // set
 	this->recordingNumber = recordingNumber;
 	this->experimentNumber = experimentNumber;
 
-	processorArray.clear();
-	lastProcId = 0;
-
-	openFile(rootFolder, getEventChannel(0), 0);
-
-	openMessageFile(rootFolder);
+	openMessageFile(rootFolder); // global message file
     
     uint16 activeStreamId = 0;
 
-	int nChannels = getNumRecordedContinuousChannels();
-
-	for (int i = 0; i < nChannels; i++)
+	for (int i = 0; i < getNumRecordedContinuousChannels(); i++)
 	{
-		const ContinuousChannel* ch = getContinuousChannel(getRealChannel(i));
+		const ContinuousChannel* ch = getContinuousChannel(getGlobalIndex(i));
         
         if (ch->getStreamId() != activeStreamId)
         {
             firstChannelsInStream.add(ch);
-            openTimestampFile(rootFolder, ch);
             activeStreamId = ch->getStreamId();
-        }
+            String timestampFileName = openTimestampFile(rootFolder, ch);
             
-		openFile(rootFolder, ch, getRealChannel(i));
+            StreamInfo* info = new StreamInfo();
+            info->streamId = ch->getStreamId();
+            info->sourceNodeId = ch->getSourceNodeId();
+            info->name = ch->getStreamName();
+            info->sampleRate = ch->getSampleRate();
+            info->sourceNodeName = ch->getSourceNodeName();
+            info->timestampFileName = timestampFileName;
+            streamInfoArray.add(info);
+        }
+        
+		String filename = openContinuousFile(rootFolder, ch, getGlobalIndex(i));
 		blockIndex.add(0);
 		samplesSinceLastTimestamp.add(0);
+        
+        ChannelInfo* c = new ChannelInfo();
+        c->filename = filename;
+        c->name = ch->getName();
+        c->startPos = ftell(fileArray.getLast());
+        c->bitVolts = dynamic_cast<const ContinuousChannel*>(ch)->getBitVolts();
+        streamInfoArray.getLast()->channels.add(c);
 	}
+    
+    activeStreamId = 0;
+    
+    for (int i = 0; i < getNumRecordedEventChannels(); i++)
+    {
+        const EventChannel* ch = getEventChannel(i);
+        
+        if (ch->getStreamId() != activeStreamId)
+        {
+            activeStreamId = ch->getStreamId();
+            String eventFileName = openEventFile(rootFolder, ch);
 
-	int nSpikes = getNumRecordedSpikeChannels();
+            bool streamExists = false;
+            
+            for (auto streamInfo : streamInfoArray)
+            {
+                if (streamInfo->streamId == activeStreamId)
+                {
+                    streamInfo->eventFileName = eventFileName;
+                    streamExists = true;
+                    break;
+                }
+            }
+            
+            if (!streamExists)
+            {
+                StreamInfo* info = new StreamInfo();
+                info->sourceNodeId = ch->getSourceNodeId();
+                info->name = ch->getStreamName();
+                info->sampleRate = ch->getSampleRate();
+                info->sourceNodeName = ch->getSourceNodeName();
+                info->eventFileName = eventFileName;
+                streamInfoArray.add(info);
+            }
 
-	for (int i = 0; i < nSpikes; i++)
+        }
+    }
+    
+    activeStreamId = 0;
+
+    for (int i = 0; i < getNumRecordedSpikeChannels(); i++)
 	{
+        const SpikeChannel* ch = getSpikeChannel(i);
+        
 		spikeFileArray.add(nullptr);
-		openSpikeFile(rootFolder, getSpikeChannel(i), i);
+		String filename = openSpikeFile(rootFolder, ch, i);
+        
+        SpikeChannelInfo* c = new SpikeChannelInfo();
+        c->filename = filename;
+        c->name = ch->getName();
+        c->startPos = ftell(spikeFileArray.getLast());
+        c->bitVolts = ch->getChannelBitVolts(0);
+        c->num_samples = ch->getTotalSamples();
+        c->num_channels = ch->getNumChannels();
+        
+        if (ch->getStreamId() != activeStreamId)
+        {
+            activeStreamId = ch->getStreamId();
+
+            bool streamExists = false;
+            
+            for (auto streamInfo : streamInfoArray)
+            {
+                if (streamInfo->streamId == activeStreamId)
+                {
+                    streamInfo->spikeChannels.add(c);
+                    streamExists = true;
+                    break;
+                }
+            }
+            
+            if (!streamExists)
+            {
+                StreamInfo* info = new StreamInfo();
+                info->sourceNodeId = ch->getSourceNodeId();
+                info->name = ch->getStreamName();
+                info->sampleRate = ch->getSampleRate();
+                info->sourceNodeName = ch->getSourceNodeName();
+                info->spikeChannels.add(c);
+                streamInfoArray.add(info);
+            }
+
+        }
 	}
 }
 
-void OpenEphysFormat::openTimestampFile(File rootFolder, const ChannelInfoObject *channel)
+String OpenEphysFormat::openTimestampFile(File rootFolder, const ChannelInfoObject *channel)
 {
     FILE* tsFile;
     
-    String filename = rootFolder.getFullPathName() + rootFolder.getSeparatorString();
+    String basePath = rootFolder.getFullPathName() + rootFolder.getSeparatorString();
     
-    filename += String(channel->getSourceNodeId());
+    String filename = String(channel->getSourceNodeId());
     filename += "_";
 
     // need to indicate stream somehow
     filename += String(channel->getStreamName().removeCharacters(" ").replaceCharacter('_','-'));
     filename += ".timestamps";
     
-    LOGD("OPENING FILE: ", filename);
-
-    File f = File(filename);
-
-    bool fileExists = f.exists();
-
+    String fullpath = basePath + filename;
+    
+    File f = File(fullpath);
+    
     diskWriteLock.enter();
 
-    tsFile = fopen(filename.toUTF8(), "ab");
-    timestampFileArray.add(tsFile);
+    bool fileExists = f.exists();
     
+    if (!fileExists)
+    {
+        LOGD("OPENING FILE: ", filename);
+        tsFile = fopen(fullpath.toUTF8(), "ab");
+        timestampFileArray.add(tsFile);
+    }
+    else
+    {
+        fseek(tsFile, 0, SEEK_END);
+    }
+
     diskWriteLock.exit();
     
+    return filename;
     
 }
 
+String OpenEphysFormat::openEventFile(File rootFolder, const ChannelInfoObject* channel)
+{
+    FILE* eventFile;
+    
+    String basePath = rootFolder.getFullPathName() + rootFolder.getSeparatorString();
+    
+    String filename = String(channel->getSourceNodeId());
+    filename += "_";
 
-void OpenEphysFormat::openFile(File rootFolder, const ChannelInfoObject* ch, int channelIndex)
+    // need to indicate stream somehow
+    filename += String(channel->getStreamName().removeCharacters(" ").replaceCharacter('_','-'));
+    filename += ".events";
+    
+    String fullPath = basePath + filename;
+    
+    File f = File(fullPath);
+
+    bool fileExists = f.exists();
+    
+    diskWriteLock.enter();
+    
+    if (!fileExists)
+    {
+        LOGD("OPENING FILE: ", filename);
+        eventFile = fopen(fullPath.toUTF8(), "ab");
+        
+        LOGD("Writing header.");
+        String header = generateHeader(channel, generateDateString());
+        LOGD("File ID: ", eventFile, ", number of bytes: ", header.getNumBytesAsUTF8());
+
+        fwrite(header.toUTF8(), 1, header.getNumBytesAsUTF8(), eventFile);
+        
+        eventFileArray.add(eventFile);
+        eventFileMap[channel->getStreamId()] = eventFile;
+    }
+    else
+    {
+        fseek(eventFile, 0, SEEK_END);
+    }
+    
+    
+    diskWriteLock.exit();
+    
+    return filename;
+    
+}
+
+String OpenEphysFormat::openContinuousFile(File rootFolder, const ChannelInfoObject* ch, int channelIndex)
 {
 	FILE* chFile;
-	bool isEvent;
-	
+
 	String fullPath(rootFolder.getFullPathName() + rootFolder.getSeparatorString());
 	String fileName;
 
 	recordPath = fullPath;
 
-	isEvent = (ch->getType() == InfoObject::Type::EVENT_CHANNEL) ? true : false;
-	
-	if (isEvent)
-	{
-		if (experimentNumber > 1)
-			fileName += "all_channels_" + String(experimentNumber) + ".events";
-		else
-			fileName += "all_channels.events";
-	}
-	else
-	{
-		fileName += getFileName(channelIndex);
-	}
+    String fname = getFileName(channelIndex);
 
+    fileName += fname;
 	fullPath += fileName;
 	LOGD("OPENING FILE: ", fullPath);
 
@@ -202,50 +328,35 @@ void OpenEphysFormat::openFile(File rootFolder, const ChannelInfoObject* ch, int
 		fseek(chFile, 0, SEEK_END);
 	}
 
-	if (isEvent)
-		eventFile = chFile;
-	else
-	{
-		fileArray.add(chFile);
+    fileArray.add(chFile);
 
-		if (ch->getNodeId() != lastProcId)
-		{
-			lastProcId = ch->getNodeId();
-			ProcInfo* p = new ProcInfo();
-			p->id = ch->getNodeId();
-			p->sampleRate = ch->getSampleRate();
-			processorArray.add(p);
-		}
-
-		ChannelInfo* c = new ChannelInfo();
-		c->filename = fileName;
-		c->name = ch->getName();
-		c->startPos = ftell(chFile);
-		c->bitVolts = dynamic_cast<const ContinuousChannel*>(ch)->getBitVolts();
-		processorArray.getLast()->channels.add(c);
-	}
 	diskWriteLock.exit();
+    
+    return fname;
 
 }
 
-void OpenEphysFormat::openSpikeFile(File rootFolder, const SpikeChannel* elec, int channelIndex)
+String OpenEphysFormat::openSpikeFile(File rootFolder, const SpikeChannel* elec, int channelIndex)
 {
 
 	FILE* spFile;
 	String fullPath(rootFolder.getFullPathName() + rootFolder.getSeparatorString());
-	fullPath += elec->getName().removeCharacters(" ");
-	fullPath += "_";
+    
+	String filename = elec->getName().removeCharacters(" ");
+    filename += "_";
 
 	// need to indicate stream somehow
-	fullPath += String(elec->getStreamName().removeCharacters(" ").replaceCharacter('_', '-'));
-	fullPath += "_";
+    filename += String(elec->getStreamName().removeCharacters(" ").replaceCharacter('_', '-'));
+    filename += "_";
 
 	if (experimentNumber > 1)
 	{
-		fullPath += "_" + String(experimentNumber);
+        filename += "_" + String(experimentNumber);
 	}
 
-	fullPath += ".spikes";
+    filename += ".spikes";
+    
+    fullPath += filename;
 
 	LOGD("OPENING FILE: ", fullPath);
 
@@ -267,6 +378,8 @@ void OpenEphysFormat::openSpikeFile(File rootFolder, const SpikeChannel* elec, i
 	diskWriteLock.exit();
 	spikeFileArray.set(channelIndex, spFile);
 	LOGD("Added file.");
+    
+    return filename;
 
 }
 
@@ -368,13 +481,14 @@ void OpenEphysFormat::closeFiles()
 		}
 	}
 	
-    if (eventFile != nullptr)
+    for (int i = 0; i < eventFileArray.size(); i++)
 	{
 		diskWriteLock.enter();
-		fclose(eventFile);
-		eventFile = nullptr;
+		fclose(eventFileArray[i]);
+        eventFileArray.set(i, nullptr);
 		diskWriteLock.exit();
 	}
+    
 	if (messageFile != nullptr)
 	{
 		diskWriteLock.enter();
@@ -438,14 +552,17 @@ void OpenEphysFormat::writeContinuousData(int writeChannel,
 
 void OpenEphysFormat::writeEvent(int eventChannel, const EventPacket& event)
 {
-	writeTTLEvent(eventChannel, event);
 
 	if (Event::getEventType(event) == EventChannel::TEXT)
 	{
 		TextEventPtr ev = TextEvent::deserialize(event, getEventChannel(eventChannel));
 		if (ev == nullptr) return;
 		writeMessage(ev->getText(), ev->getProcessorId(), ev->getTimestamp());
-	}
+    } else {
+        
+        const EventChannel* info = getEventChannel(eventChannel);
+        writeTTLEvent(info, event);
+    }
 }
 
 
@@ -548,17 +665,17 @@ void OpenEphysFormat::writeMessage(String message, uint16 processorID, int64 tim
 }
 
 
-void OpenEphysFormat::writeTTLEvent(int eventIndex, const EventPacket& packet)
+void OpenEphysFormat::writeTTLEvent(const EventChannel* info, const EventPacket& packet)
 {
 
-	if (eventFile == nullptr)
+	if (eventFileMap.count(info->getStreamId()) == 0)
 		return;
 
 	uint8 data[16];
 
 	int16 samplePos = 0;
 
-	EventPtr ev = Event::deserialize(packet, getEventChannel(eventIndex));
+	EventPtr ev = Event::deserialize(packet, info);
 	if (!ev) return;
 	*reinterpret_cast<int64*>(data) = ev->getTimestamp();
 	*reinterpret_cast<int16*>(data + 8) = samplePos;
@@ -573,7 +690,7 @@ void OpenEphysFormat::writeTTLEvent(int eventIndex, const EventPacket& packet)
 	fwrite(&data,			// ptr
 		sizeof(uint8),   	// size of each element
 		16, 		  		// count
-		eventFile);   		// ptr to FILE object
+		eventFileMap[info->getStreamId()]);   		// ptr to FILE object
 
 	diskWriteLock.exit();
 }
@@ -587,7 +704,7 @@ void OpenEphysFormat::writeContinuousBuffer(const float* data, const double* tim
 		return;
 
 	// scale the data back into the range of int16
-    const ContinuousChannel* ch = getContinuousChannel(getRealChannel(writeChannel));
+    const ContinuousChannel* ch = getContinuousChannel(getGlobalIndex(writeChannel));
 	float scaleFactor = float(0x7fff) * ch->getBitVolts();
 
 	for (int n = 0; n < nSamples; n++)
@@ -684,9 +801,9 @@ void OpenEphysFormat::writeRecordMarker(FILE* file)
 void OpenEphysFormat::writeXml()
 {
 	String name = recordPath + "structure";
-	if (experimentNumber > 1)
+	
+    if (experimentNumber > 1)
 	{
-		name += "_";
 		name += String(experimentNumber);
 	}
 	name += ".openephys";
@@ -698,31 +815,68 @@ void OpenEphysFormat::writeXml()
 	if (!xml || !xml->hasTagName("EXPERIMENT"))
 	{
 		xml = std::make_unique<XmlElement>("EXPERIMENT");
-		xml->setAttribute("version", VERSION_STRING);
+		xml->setAttribute("format_version", VERSION_STRING);
 		xml->setAttribute("number", experimentNumber);
 	}
 	
-	XmlElement* rec = new XmlElement("RECORDING");
-	rec->setAttribute("number", recordingNumber);
+	XmlElement* recordingXml = new XmlElement("RECORDING");
+    recordingXml->setAttribute("number", recordingNumber + 1);
 	
-	for (int i = 0; i < processorArray.size(); i++)
+	for (auto streamInfo : streamInfoArray)
 	{
-		XmlElement* proc = new XmlElement("PROCESSOR");
-		proc->setAttribute("id", processorArray[i]->id);
-		rec->setAttribute("samplerate", processorArray[i]->sampleRate);
+		XmlElement* streamXml = new XmlElement("STREAM");
+        streamXml->setAttribute("name", streamInfo->name);
+        streamXml->setAttribute("source_node_id", streamInfo->sourceNodeId);
+        streamXml->setAttribute("source_node_name", streamInfo->sourceNodeName);
+        streamXml->setAttribute("sample_rate", streamInfo->sampleRate);
 		
-		for (int j = 0; j < processorArray[i]->channels.size(); j++)
+		for (auto channelInfo : streamInfo->channels)
 		{
-			ChannelInfo* c = processorArray[i]->channels[j];
-			XmlElement* chan = new XmlElement("CHANNEL");
-			chan->setAttribute("name", c->name);
-			chan->setAttribute("bitVolts", c->bitVolts);
-			chan->setAttribute("filename", c->filename);
-			chan->setAttribute("position", (double)(c->startPos)); //As long as the file doesnt exceed 2^53 bytes, this will have integer precission. Better than limiting to 32bits.
-			proc->addChildElement(chan);
+			XmlElement* channelXml = new XmlElement("CHANNEL");
+            channelXml->setAttribute("name", channelInfo->name);
+            channelXml->setAttribute("bitVolts", channelInfo->bitVolts);
+            channelXml->setAttribute("filename", channelInfo->filename);
+            channelXml->setAttribute("position", (double)(channelInfo->startPos));  //As long as the file doesnt exceed 2^53 bytes, this will have integer precission. Better than limiting to 32bits.
+            streamXml->addChildElement(channelXml);
 		}
-		rec->addChildElement(proc);
+        
+        for (auto channelInfo : streamInfo->spikeChannels)
+        {
+            XmlElement* channelXml = new XmlElement("SPIKECHANNEL");
+            channelXml->setAttribute("name", channelInfo->name);
+            channelXml->setAttribute("bitVolts", channelInfo->bitVolts);
+            channelXml->setAttribute("filename", channelInfo->filename);
+            channelXml->setAttribute("num_channels", channelInfo->num_channels);
+            channelXml->setAttribute("num_samples", channelInfo->num_samples);
+            channelXml->setAttribute("position", (double)(channelInfo->startPos));  //As long as the file doesnt exceed 2^53 bytes, this will have integer precission. Better than limiting to 32bits.
+            streamXml->addChildElement(channelXml);
+        }
+        
+        if (streamInfo->eventFileName.length() > 0)
+        {
+            XmlElement* eventChannelXml = new XmlElement("EVENTS");
+            eventChannelXml->setAttribute("filename", streamInfo->eventFileName);
+            streamXml->addChildElement(eventChannelXml);
+        }
+        
+        if (streamInfo->timestampFileName.length() > 0)
+        {
+            XmlElement* timestampChannelXml = new XmlElement("TIMESTAMPS");
+            timestampChannelXml->setAttribute("filename", streamInfo->timestampFileName);
+            streamXml->addChildElement(timestampChannelXml);
+        }
+        
+        
+        recordingXml->addChildElement(streamXml);
 	}
-	xml->addChildElement(rec);
+    
+	xml->addChildElement(recordingXml);
 	xml->writeTo(file);
+
+}
+
+void OpenEphysFormat::setParameter(EngineParameter& parameter)
+{
+    //NOT USED
+    
 }
