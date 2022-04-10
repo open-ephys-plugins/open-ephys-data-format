@@ -213,6 +213,7 @@ String OpenEphysFormat::openTimestampFile(File rootFolder, const ChannelInfoObje
 
     // need to indicate stream somehow
     filename += String(channel->getStreamName().removeCharacters(" ").replaceCharacter('_','-'));
+    filename += "_" + String(experimentNumber);
     filename += ".timestamps";
     
     String fullpath = basePath + filename;
@@ -220,20 +221,18 @@ String OpenEphysFormat::openTimestampFile(File rootFolder, const ChannelInfoObje
     File f = File(fullpath);
     
     diskWriteLock.enter();
-
+    
+    LOGD("OPENING FILE: ", filename);
+    tsFile = fopen(fullpath.toUTF8(), "ab");
+    
     bool fileExists = f.exists();
     
-    if (!fileExists)
-    {
-        LOGD("OPENING FILE: ", filename);
-        tsFile = fopen(fullpath.toUTF8(), "ab");
-        timestampFileArray.add(tsFile);
-    }
-    else
+    if (fileExists)
     {
         fseek(tsFile, 0, SEEK_END);
     }
 
+    timestampFileArray.add(tsFile);
     diskWriteLock.exit();
     
     return filename;
@@ -251,35 +250,34 @@ String OpenEphysFormat::openEventFile(File rootFolder, const ChannelInfoObject* 
 
     // need to indicate stream somehow
     filename += String(channel->getStreamName().removeCharacters(" ").replaceCharacter('_','-'));
+    filename += "_" + String(experimentNumber);
     filename += ".events";
     
     String fullPath = basePath + filename;
     
     File f = File(fullPath);
-
     bool fileExists = f.exists();
+    
+    LOGD("OPENING FILE: ", filename);
+    eventFile = fopen(fullPath.toUTF8(), "ab");
     
     diskWriteLock.enter();
     
     if (!fileExists)
     {
-        LOGD("OPENING FILE: ", filename);
-        eventFile = fopen(fullPath.toUTF8(), "ab");
-        
         LOGD("Writing header.");
         String header = generateHeader(channel, generateDateString());
         LOGD("File ID: ", eventFile, ", number of bytes: ", header.getNumBytesAsUTF8());
 
         fwrite(header.toUTF8(), 1, header.getNumBytesAsUTF8(), eventFile);
-        
-        eventFileArray.add(eventFile);
-        eventFileMap[channel->getStreamId()] = eventFile;
     }
     else
     {
         fseek(eventFile, 0, SEEK_END);
     }
     
+    eventFileArray.add(eventFile);
+    eventFileMap[channel->getStreamId()] = eventFile;
     
     diskWriteLock.exit();
     
@@ -404,6 +402,9 @@ void OpenEphysFormat::openMessageFile(File rootFolder)
 	diskWriteLock.enter();
 
 	mFile = fopen(fullPath.toUTF8(), "ab");
+    
+    if (f.exists())
+        fseek(mFile, 0, SEEK_END);
 
 	diskWriteLock.exit();
 	messageFile = mFile;
