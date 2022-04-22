@@ -44,7 +44,7 @@ extern "C" EXPORT void getLibInfo(Plugin::LibraryInfo* info)
 	Should not be changed to ensure it is always equal to the one used in the latest codebase.
 	The GUI refuses to load plugins with mismatched API versions */
 	info->apiVersion = PLUGIN_API_VER;
-	info->name = "OpenEphysDataFormat"; 
+	info->name = "Open Ephys Data Format"; 
 	info->libVersion = "0.6.0"; 
 	info->numPlugins = NUM_PLUGINS;
 }
