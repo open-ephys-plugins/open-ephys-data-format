@@ -99,10 +99,13 @@ private:
     void writeContinuousBuffer(const float* data, const double* timestamps, int nSamples, int channel);
 
 	/** Writes the timestamp sync texts info */
-	void writeTimestampAndSampleCount(FILE* file, int channel);
+	void writeSampleNumberAndCount(FILE* file, int channel);
     
     /** Writes the synchronized timestamp for one stream / block combo */
     void writeSynchronizedTimestamp(FILE* file, const double* ts);
+    
+    /** Writes the synchronized timestamp for one stream / block combo */
+    void writeNpyTimestamp(NpyFile* file, const double* ts);
 
 	/** Write a 10-byte marker indicating the end of a record */
 	void writeRecordMarker(FILE* file);
@@ -117,7 +120,7 @@ private:
 	void writeXml();
 
 	Array<int> blockIndex;
-	Array<int> samplesSinceLastTimestamp;
+	Array<int> samplesSinceLastRecord;
 	uint16 recordingNumber;
 	int experimentNumber;
 
