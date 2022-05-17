@@ -41,71 +41,82 @@ bool OpenEphysFileSource::open(File file)
 
 	m_rootPath = file.getParentDirectory();
 
-    for (auto* element: xml->getChildIterator())
+    for (auto* recordTag: xml->getChildIterator())
     {
-        if (element->hasTagName("RECORDING"))
+        if (recordTag->hasTagName("RECORDING"))
         {
 
 			Recording recording;
 
-            recording.id = element->getIntAttribute("number");
-            int sampleRate = element->getIntAttribute("samplerate");
+            recording.id = recordTag->getIntAttribute("number");
 
-
-            for (auto* processor: element->getChildIterator())
+            for (auto* streamTag: recordTag->getChildIterator())
             {
-				//Currently the ID of the Record Node and not used
-                //int id = processor->getIntAttribute("id"); 
 
-                for (auto* channel: processor->getChildIterator())
+				String streamName = streamTag->getStringAttribute("name");
+				int sourceNodeId = streamTag->getIntAttribute("source_node_id");
+				String sourceNodeName = streamTag->getStringAttribute("source_node_name");
+				float sampleRate = streamTag->getIntAttribute("sample_rate") * 1.0f;
+
+                for (auto* channel: streamTag->getChildIterator())
                 {
 
                     ChannelInfo info;
 
                     info.filename = channel->getStringAttribute("filename");
-                    info.name = channel->getStringAttribute("name");
-                    info.bitVolts = channel->getStringAttribute("bitVolts").getDoubleValue();
-                    info.startPos = channel->getIntAttribute("position");
 
-					//Get processor id
-					juce::StringArray tokens;
-					tokens.addTokens (info.filename, "_.", "\"");
-					int processorID = std::stoi(tokens[0].toStdString());
-
-					if (!recording.processors.count(processorID))
+					if (channel->getTagName() == "CHANNEL")
 					{
-						ProcInfo procInfo;
 
-						procInfo.id = processorID;
-						procInfo.sampleRate = sampleRate;
-						procInfo.startPos = info.startPos;
-						recording.processors[processorID] = procInfo;
+						info.name = channel->getStringAttribute("name");
+						info.bitVolts = channel->getStringAttribute("bitVolts").getDoubleValue();
+						info.startPos = channel->getIntAttribute("position");
+
+
+						if (!recording.streams.count(streamName))
+						{
+							StreamInfo streamInfo;
+
+							streamInfo.sampleRate = sampleRate;
+							streamInfo.startPos = info.startPos;
+							recording.streams[streamName] = streamInfo;
+						}
+
+						recording.streams[streamName].channels.push_back(info);
+
+						LOGC("Found: ", recording.streams[streamName].channels.size(), " channels for stream ", streamName);
+
 					}
-
-					recording.processors[processorID].channels.push_back(info);
+					else if (channel->getTagName() == "EVENTS")
+					{
+						//TODO: Load event data
+					}
 
                 }
 
             }
 			recordings[recording.id] = recording;
 
-			//Update the total number of samples for the previous recording
-			if (recording.id > 0)
+			//Update the total number of samples for each stream in the previous recording
+			if (recording.id > 1)
 			{
-
-				//Get a list of all the source processors in this experiment
-				std::vector<int> pids;
-				for(auto const& imap: recordings[recording.id].processors)
-					pids.push_back(imap.first);
 
 				Recording curr = recordings[recording.id];
 				Recording prev = recordings[recording.id - 1];
 
-				//Use the start pos of the first detected source processor
-				long int prevStartPos = prev.processors[pids[0]].startPos;
-				long int currStartPos = curr.processors[pids[0]].startPos;
+				//Get a list of all the source processors in this experiment
+				std::vector<String> streams;
+				for (auto const& imap : recordings[recording.id].streams)
+				{
+					String streamName = imap.first;
 
-				prev.numSamples = currStartPos - prevStartPos;
+					//Use the start pos of the first detected source processor
+					long int prevStartPos = prev.streams[streamName].startPos;
+					long int currStartPos = curr.streams[streamName].startPos;
+
+					prev.streams[streamName].numSamples = currStartPos - prevStartPos;
+
+				}
 
 				recordings[recording.id - 1] = prev;
 
@@ -115,20 +126,24 @@ bool OpenEphysFileSource::open(File file)
     }
 
 	//Get total number of samples for the last recording
-	if (recordings.size())
+	int numRecordings = recordings.size();
+	if (numRecordings > 0)
 	{
-		Recording last = recordings[recordings.size() - 1];
-		std::vector<int> pids;
-		for(auto const& imap: last.processors)
-			pids.push_back(imap.first);
-		ProcInfo info = recordings[recordings.size() - 1].processors[pids[0]];
-		juce::File dataFile = m_rootPath.getChildFile(info.channels[0].filename);
-		int fileSize = dataFile.getSize();
-		last.numSamples = (dataFile.getSize() - info.startPos) / 2070 * 1024;
-		recordings[recordings.size() - 1] = last;
+		Recording last = recordings[numRecordings];
+		std::vector<String> streams;
+		for (auto const& imap : last.streams)
+		{
+			String streamName = imap.first;
+
+			StreamInfo info = recordings[numRecordings].streams[streamName];
+			juce::File dataFile = m_rootPath.getChildFile(info.channels[0].filename);
+			int fileSize = dataFile.getSize();
+			last.streams[streamName].numSamples = (dataFile.getSize() - info.startPos) / 2070 * 1024;
+		}
+		recordings[recordings.size()] = last;
 	}
 
-	loadEventData();
+	//loadEventData();
 
 	return true;
 }
@@ -139,28 +154,25 @@ void OpenEphysFileSource::fillRecordInfo()
 	for (auto rec : extract_keys(recordings))
 	{
 
-		for (auto procID : extract_keys(recordings[rec].processors))
+		for (auto streamName : extract_keys(recordings[rec].streams))
 		{
 
 			RecordInfo info;
 
-			info.name = String(procID);
-			info.sampleRate = recordings[rec].processors[procID].sampleRate;
-			juce::File dataFile = m_rootPath.getChildFile(recordings[rec].processors[procID].channels[0].filename);
-			info.numSamples = recordings[rec].numSamples;
+			info.name = String(streamName);
+			info.sampleRate = recordings[rec].streams[streamName].sampleRate;
+			juce::File dataFile = m_rootPath.getChildFile(recordings[rec].streams[streamName].channels[0].filename);
+			info.numSamples = recordings[rec].streams[streamName].numSamples;
 
-			for (int i = 0; i < recordings[rec].processors[procID].channels.size(); i++)
+			for (int i = 0; i < recordings[rec].streams[streamName].channels.size(); i++)
 			{
-
 				RecordedChannelInfo cInfo;
 
-				cInfo.name = recordings[rec].processors[procID].channels[i].name;
-				cInfo.bitVolts = recordings[rec].processors[procID].channels[i].bitVolts;
+				cInfo.name = recordings[rec].streams[streamName].channels[i].name;
+				cInfo.bitVolts = recordings[rec].streams[streamName].channels[i].bitVolts;
 				
 				info.channels.add(cInfo);
-
 			}
-
 			infoArray.add(info);
 			numRecords++;
 			
@@ -173,7 +185,7 @@ void OpenEphysFileSource::loadEventData()
 {
 
 	/* Loads event data into eventInfoArray indexed by recording number */
-
+	/*
 	File eventsFile = m_rootPath.getChildFile("all_channels.events");
 	int nEvents = (eventsFile.getSize() - EVENT_HEADER_SIZE_IN_BYTES) / BYTES_PER_EVENT;
 
@@ -207,21 +219,22 @@ void OpenEphysFileSource::loadEventData()
 		eventInfoArray.add(eventInfo);
 
 	}
+	*/
 	
 }
 
 void OpenEphysFileSource::updateActiveRecord(int index)
 {
 
+	activeRecord.set(index);
 	dataFiles.clear();
 
-	//TODO: This needs to be set via the FileEditor using two combo boxes
-	int selectedRecording = activeRecord.get();
-	int selectedProcessorID = extract_keys(recordings[selectedRecording].processors)[0];
+	int selectedRecording = 1; //TODO: Currently only supports single recording
+	String selectedStreamName = extract_keys(recordings[selectedRecording].streams)[index];
 
-	for (int i = 0; i < infoArray[selectedRecording].channels.size(); i++)
+	for (int i = 0; i < infoArray[index].channels.size(); i++)
 	{
-		juce::File dataFile = m_rootPath.getChildFile(recordings[selectedRecording].processors[selectedProcessorID].channels[i].filename);
+		juce::File dataFile = m_rootPath.getChildFile(recordings[selectedRecording].streams[selectedStreamName].channels[i].filename);
 		dataFiles.add(new MemoryMappedFile(dataFile, juce::MemoryMappedFile::readOnly));
 	}
 
@@ -282,29 +295,23 @@ void OpenEphysFileSource::processChannelData(int16* inBuffer, float* outBuffer, 
 void OpenEphysFileSource::processEventData(EventInfo &eventInfo, int64 start, int64 stop) 
 { 
 
-	//Convert start and stop times relative to number of total samples
-	start = start % infoArray[getActiveRecord()].numSamples;
-	stop = stop % infoArray[getActiveRecord()].numSamples;
+	int local_start = start % getActiveNumSamples();;
+	int local_stop = stop % getActiveNumSamples();
+	int loop_count = start / getActiveNumSamples();
 
-	if (stop < start) //we've reached the end of the data file
-	{
-	}
+	EventInfo info = eventInfoMap[currentStream];
 
-	for (auto info : eventInfoArray)
+	int i = 0;
+
+	while (i < info.timestamps.size())
 	{
-		int i = 0;
-		while (i < info.timestamps.size())
+		if (info.timestamps[i] >= local_start && info.timestamps[i] <= local_stop)
 		{
-			if (info.timestamps[i] >= start && info.timestamps[i] <= stop)
-			{
-				eventInfo.channels.push_back(info.channels[i]);
-				eventInfo.channelStates.push_back(info.channelStates[i]);
-				//TODO (PK): Timestamps are currently shifted by the start timestamp of the first source processor detected in the current recording
-				//The start timestamp SHOULD come from the channel that generated/triggered the event, but that info is currently not stored in the recorded files
-				eventInfo.timestamps.push_back(info.timestamps[i]);
-			}
-			i++;
+			eventInfo.channels.push_back(info.channels[i] - 1);
+			eventInfo.channelStates.push_back((info.channelStates[i]));
+			eventInfo.timestamps.push_back(info.timestamps[i] + loop_count * getActiveNumSamples());
 		}
+		i++;
 	}
 
 };

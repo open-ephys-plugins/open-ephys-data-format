@@ -84,20 +84,20 @@ private:
         long int startPos;
     };
 
-    struct ProcInfo
+    struct StreamInfo
     {
-        int id;
+        int sourceId;
+        String name;
         float sampleRate;
         std::vector<ChannelInfo> channels;
-        long int startPos; //Currently assumes all channels within a processor have the same startPos
+        long int startPos;
+        int numSamples;
     };
 
     struct Recording
     {
         int id;
-        int sampleRate;
-        std::map<int, ProcInfo> processors;
-        int64 numSamples;
+        std::map<String, StreamInfo> streams;
     };
 
     OwnedArray<MemoryMappedFile> dataFiles;
