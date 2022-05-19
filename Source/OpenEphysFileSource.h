@@ -68,9 +68,6 @@ public:
     void updateActiveRecord(int index) override;
 
 private:
-    
-    /** Pre-load data about events */
-    void loadEventData();
 
     /** Helper function for reading in int16 data */
     void readSamples(int16* buffer, int64 samplesToRead);
@@ -91,6 +88,7 @@ private:
         float sampleRate;
         std::vector<ChannelInfo> channels;
         long int startPos;
+        int64 startTimestamp;
         int numSamples;
     };
 

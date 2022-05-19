@@ -79,17 +79,52 @@ bool OpenEphysFileSource::open(File file)
 
 							streamInfo.sampleRate = sampleRate;
 							streamInfo.startPos = info.startPos;
+
+							std::unique_ptr<MemoryMappedFile> timestampFileMap(new MemoryMappedFile(m_rootPath.getChildFile(info.filename), MemoryMappedFile::readOnly));
+
+							int64* startTimestamp = static_cast<int64*>(timestampFileMap->getData()) + 1024/8;
+
+							streamInfo.startTimestamp = *startTimestamp;
+
 							recording.streams[streamName] = streamInfo;
+
 						}
 
 						recording.streams[streamName].channels.push_back(info);
 
-						LOGC("Found: ", recording.streams[streamName].channels.size(), " channels for stream ", streamName);
-
 					}
 					else if (channel->getTagName() == "EVENTS")
 					{
-						//TODO: Load event data
+
+						File eventsFile = m_rootPath.getChildFile(info.filename);
+						int nEvents = (eventsFile.getSize() - EVENT_HEADER_SIZE_IN_BYTES) / BYTES_PER_EVENT;
+
+						if (nEvents > 0)
+						{
+							std::unique_ptr<MemoryMappedFile> eventFileMap(new MemoryMappedFile(eventsFile, MemoryMappedFile::readOnly));
+
+							EventInfo eventInfo;
+
+							for (int i = 0; i < nEvents; i++)
+							{
+
+								int64* timestamp = static_cast<int64*>(eventFileMap->getData()) + EVENT_HEADER_SIZE_IN_BYTES / 8 + i * sizeof(int64) / 4;
+								uint8* eventType = static_cast<uint8*>(eventFileMap->getData()) + EVENT_HEADER_SIZE_IN_BYTES + i * BYTES_PER_EVENT + 10;
+								uint8* sourceID = static_cast<uint8*>(eventFileMap->getData()) + EVENT_HEADER_SIZE_IN_BYTES + i * BYTES_PER_EVENT + 11;
+								uint8* channelState = static_cast<uint8*>(eventFileMap->getData()) + EVENT_HEADER_SIZE_IN_BYTES + i * BYTES_PER_EVENT + 12;
+								uint8* channel = static_cast<uint8*>(eventFileMap->getData()) + EVENT_HEADER_SIZE_IN_BYTES + i * BYTES_PER_EVENT + 13;
+								uint8* recordingNum = static_cast<uint8*>(eventFileMap->getData()) + EVENT_HEADER_SIZE_IN_BYTES + i * BYTES_PER_EVENT + 14;
+
+								eventInfo.channels.push_back(*channel);
+								eventInfo.channelStates.push_back(*reinterpret_cast<juce::int16*>(channelState));
+
+								int64 offset = recording.streams[streamName].startTimestamp;
+								eventInfo.timestamps.push_back(*timestamp - offset);
+							}
+							eventInfoMap[streamName] = eventInfo;
+
+						}
+
 					}
 
                 }
@@ -104,13 +139,11 @@ bool OpenEphysFileSource::open(File file)
 				Recording curr = recordings[recording.id];
 				Recording prev = recordings[recording.id - 1];
 
-				//Get a list of all the source processors in this experiment
 				std::vector<String> streams;
 				for (auto const& imap : recordings[recording.id].streams)
 				{
 					String streamName = imap.first;
 
-					//Use the start pos of the first detected source processor
 					long int prevStartPos = prev.streams[streamName].startPos;
 					long int currStartPos = curr.streams[streamName].startPos;
 
@@ -119,13 +152,12 @@ bool OpenEphysFileSource::open(File file)
 				}
 
 				recordings[recording.id - 1] = prev;
-
 			}
 
         }
     }
 
-	//Get total number of samples for the last recording
+	///Update the total number of samples for the last recording
 	int numRecordings = recordings.size();
 	if (numRecordings > 0)
 	{
@@ -142,8 +174,6 @@ bool OpenEphysFileSource::open(File file)
 		}
 		recordings[recordings.size()] = last;
 	}
-
-	//loadEventData();
 
 	return true;
 }
@@ -181,48 +211,6 @@ void OpenEphysFileSource::fillRecordInfo()
 
 }
 
-void OpenEphysFileSource::loadEventData()
-{
-
-	/* Loads event data into eventInfoArray indexed by recording number */
-	/*
-	File eventsFile = m_rootPath.getChildFile("all_channels.events");
-	int nEvents = (eventsFile.getSize() - EVENT_HEADER_SIZE_IN_BYTES) / BYTES_PER_EVENT;
-
-	if (nEvents > 0)
-	{
-		std::unique_ptr<MemoryMappedFile> eventFileMap(new MemoryMappedFile(eventsFile, MemoryMappedFile::readOnly)); 
-
-		EventInfo eventInfo;
-		uint8 recordingIdx = 0;
-
-		for (int i = 0; i < nEvents; i++)
-		{
-			int64* timestamp = static_cast<int64*>(eventFileMap->getData()) 		+ EVENT_HEADER_SIZE_IN_BYTES / 8 + i*sizeof(int64) / 4;
-			uint8* eventType = static_cast<uint8*>(eventFileMap->getData()) 		+ EVENT_HEADER_SIZE_IN_BYTES + i*BYTES_PER_EVENT + 10; 
-			uint8* sourceID = static_cast<uint8*>(eventFileMap->getData()) 			+ EVENT_HEADER_SIZE_IN_BYTES + i*BYTES_PER_EVENT + 11;
-			uint8* channelState = static_cast<uint8*>(eventFileMap->getData()) 		+ EVENT_HEADER_SIZE_IN_BYTES + i*BYTES_PER_EVENT + 12;
-			uint8* channel = static_cast<uint8*>(eventFileMap->getData()) 			+ EVENT_HEADER_SIZE_IN_BYTES + i*BYTES_PER_EVENT + 13;
-			uint8* recordingNum = static_cast<uint8*>(eventFileMap->getData()) 		+ EVENT_HEADER_SIZE_IN_BYTES + i*BYTES_PER_EVENT + 14;
-
-			eventInfo.channels.push_back(*channel);
-			eventInfo.channelStates.push_back(*reinterpret_cast<juce::int16*>(channelState));
-			eventInfo.timestamps.push_back(*timestamp);
-
-			if (recordingIdx != *recordingNum) 
-			{
-				eventInfoArray.add(eventInfo); //can be empty if no events in this recordingIdx
-				eventInfo = {};
-				recordingIdx++;
-			}
-		}
-		eventInfoArray.add(eventInfo);
-
-	}
-	*/
-	
-}
-
 void OpenEphysFileSource::updateActiveRecord(int index)
 {
 
@@ -230,11 +218,11 @@ void OpenEphysFileSource::updateActiveRecord(int index)
 	dataFiles.clear();
 
 	int selectedRecording = 1; //TODO: Currently only supports single recording
-	String selectedStreamName = extract_keys(recordings[selectedRecording].streams)[index];
+	currentStream = extract_keys(recordings[selectedRecording].streams)[index];
 
 	for (int i = 0; i < infoArray[index].channels.size(); i++)
 	{
-		juce::File dataFile = m_rootPath.getChildFile(recordings[selectedRecording].streams[selectedStreamName].channels[i].filename);
+		juce::File dataFile = m_rootPath.getChildFile(recordings[selectedRecording].streams[currentStream].channels[i].filename);
 		dataFiles.add(new MemoryMappedFile(dataFile, juce::MemoryMappedFile::readOnly));
 	}
 
@@ -263,7 +251,7 @@ int OpenEphysFileSource::readData(int16* buffer, int nSamples)
 
 	if (m_samplePos + nSamples > getActiveNumSamples())
 	{
-		// TODO: The last block of data is likley to contain trailing zeros
+		// TODO: The last block of data is likely to contain trailing zeros
 		// Compute the number of trailing zeros and subtract from samplesToRead here
 		samplesToRead = getActiveNumSamples() - m_samplePos;
 	}
@@ -285,7 +273,6 @@ void OpenEphysFileSource::processChannelData(int16* inBuffer, float* outBuffer, 
 
 	for (int i = 0; i < numSamples; i++)
 	{
-		//TODO: Make sure this works on all platforms (tested on Linux only)
 		int16 hibyte = (*(inBuffer + (numActiveChannels * i) + channel) & 0x00ff) << 8;
 		int16 lobyte = (*(inBuffer + (numActiveChannels * i) + channel) & 0xff00) >> 8;
 		*(outBuffer + i) = ( lobyte | hibyte ) * bitVolts[channel];
@@ -307,7 +294,7 @@ void OpenEphysFileSource::processEventData(EventInfo &eventInfo, int64 start, in
 	{
 		if (info.timestamps[i] >= local_start && info.timestamps[i] <= local_stop)
 		{
-			eventInfo.channels.push_back(info.channels[i] - 1);
+			eventInfo.channels.push_back(info.channels[i]);
 			eventInfo.channelStates.push_back((info.channelStates[i]));
 			eventInfo.timestamps.push_back(info.timestamps[i] + loop_count * getActiveNumSamples());
 		}
