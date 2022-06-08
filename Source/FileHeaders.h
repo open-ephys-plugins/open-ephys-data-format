@@ -58,7 +58,7 @@ String getEventChannelHeaderText(const ChannelInfoObject* ch)
 
 	String header = "";
 
-	header += "header.channel = Events;\n";
+	header += "header.channel = 'Events';\n";
 	header += "header.channelType = 'Event';\n";
 	header += ";\n";
 	header += "header.blockLength = ";
