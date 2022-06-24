@@ -39,7 +39,7 @@ public:
 	OpenEphysFormat();
 	
 	/** Destructor */
-    ~OpenEphysFormat();
+    virtual ~OpenEphysFormat();
     
     /** Returns a string that can be used to identify this record engine*/
     String getEngineId() const;
