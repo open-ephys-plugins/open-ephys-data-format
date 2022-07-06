@@ -122,6 +122,9 @@ void OpenEphysFormat::openFiles(File rootFolder, int experimentNumber, int recor
     for (int i = 0; i < getNumRecordedEventChannels(); i++)
     {
         const EventChannel* ch = getEventChannel(i);
+
+		if(ch->getSourceNodeId() == 904)
+			continue;
         
         if (ch->getStreamId() != activeStreamId)
         {
