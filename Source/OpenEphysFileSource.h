@@ -87,9 +87,9 @@ private:
         String name;
         float sampleRate;
         std::vector<ChannelInfo> channels;
-        long int startPos;
+        int64 startPos;
         int64 startTimestamp;
-        int numSamples;
+        int64 numSamples;
     };
 
     struct Recording
@@ -105,6 +105,10 @@ private:
 
     File m_rootPath;
     int64 m_samplePos;
+
+    int64 totalSamplesRead;
+    int64 totalSamples;
+    int64 totalBlocks;
 
     int64 blockIdx;
     int64 samplesLeftInBlock;
