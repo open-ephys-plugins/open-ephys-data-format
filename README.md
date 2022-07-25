@@ -6,12 +6,11 @@ A Record Engine plugin that saves data in the original Open Ephys data format.
 
 ## Installation
 
-(Coming soon)
+This plugin must be added via the Open Ephys GUI Plugin Installer. Before installing a new Record Engine, all Record Nodes must be removed from the signal chain. To access the Plugin Installer, press **ctrl-P** or **⌘P** from inside the GUI. Once the installer is loaded, browse to the "Open Ephys Data Format" plugin and click "Install."
 
 ## Usage
 
-(link to documentation)
-
+A complete description of the Open Ephys Data Format is available [here](https://open-ephys.github.io/gui-docs/User-Manual/Recording-data/Open-Ephys-format.html).
 
 ## Building from source
 
