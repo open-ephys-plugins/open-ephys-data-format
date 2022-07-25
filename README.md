@@ -2,11 +2,11 @@
 
 ![header-image](Resources/header-image.png)
 
-A Record Engine plugin that saves data in the original Open Ephys data format.
+A Record Engine plugin that saves data in the original Open Ephys format.
 
 ## Installation
 
-This plugin must be added via the Open Ephys GUI Plugin Installer. Before installing a new Record Engine, all Record Nodes must be removed from the signal chain. To access the Plugin Installer, press **ctrl-P** or **⌘P** from inside the GUI. Once the installer is loaded, browse to the "Open Ephys Data Format" plugin and click "Install."
+This plugin can be added via the Open Ephys GUI Plugin Installer. Before installing a new Record Engine, all Record Nodes must be removed from the signal chain. To access the Plugin Installer, press **ctrl-P** or **⌘P** from inside the GUI. Once the installer is loaded, browse to the "Open Ephys Data Format" plugin and click "Install."
 
 ## Usage
 
@@ -16,7 +16,7 @@ A complete description of the Open Ephys Data Format is available [here](https:/
 
 First, follow the instructions on [this page](https://open-ephys.github.io/gui-docs/Developer-Guide/Compiling-the-GUI.html) to build the Open Ephys GUI.
 
-**Important:** This plugin is intended for use with the pre-release core application, version 0.6.0. The GUI should be compiled from the [`development-juce6`](https://github.com/open-ephys/plugin-gui/tree/development-juce6) branch, rather than the `master` branch.
+**Important:** This plugin is intended for use with the latest version of the GUI (0.6.0 and higher). The GUI should be compiled from the [`main`](https://github.com/open-ephys/plugin-gui/tree/main) branch, rather than the former `master` branch.
 
 Then, clone this repository into a directory at the same level as the `plugin-GUI`, e.g.:
  
