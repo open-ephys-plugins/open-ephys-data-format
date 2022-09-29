@@ -685,7 +685,7 @@ void OpenEphysFormat::writeTTLEvent(const EventChannel* info, const EventPacket&
 	*(data + 10) = static_cast<uint8>(ev->getEventType());
 	*(data + 11) = static_cast<uint8>(ev->getProcessorId());
 	*(data + 12) = (ev->getEventType() == EventChannel::TTL) ? (dynamic_cast<TTLEvent*>(ev.get())->getState() ? 1 : 0) : 0;
-	*(data + 13) = (ev->getEventType() == EventChannel::TTL) ? (dynamic_cast<TTLEvent*>(ev.get())->getLine() ? 1 : 0) : 0;
+	*(data + 13) = (ev->getEventType() == EventChannel::TTL) ? (dynamic_cast<TTLEvent*>(ev.get())->getLine() ? TTLEvent::getLine(packet) : 0) : 0;
 	*reinterpret_cast<uint16*>(data + 14) = recordingNumber;
 
 	diskWriteLock.enter();
