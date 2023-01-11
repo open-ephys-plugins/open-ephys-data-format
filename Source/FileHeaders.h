@@ -76,6 +76,7 @@ String getContinuousChannelHeaderText(const ChannelInfoObject* ch)
 	header += ch->getName();
 	header += "';\n";
 	header += "header.channelType = 'Continuous';\n";
+	header += "header.sampleRate = ";
 	header += String(ch->getSampleRate());
 	header += ";\n";
 	header += "header.blockLength = ";
