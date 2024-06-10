@@ -1,23 +1,23 @@
 /*
-------------------------------------------------------------------
+    ------------------------------------------------------------------
 
-This file is part of the Open Ephys GUI
-Copyright (C) 2021 Open Ephys
+    This file is part of the Open Ephys GUI
+    Copyright (C) 2024 Open Ephys
 
-------------------------------------------------------------------
+    ------------------------------------------------------------------
 
-This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation, either version 3 of the License, or
-(at your option) any later version.
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
 
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
 
-You should have received a copy of the GNU General Public License
-along with this program.  If not, see <http://www.gnu.org/licenses/>.
+    You should have received a copy of the GNU General Public License
+    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 */
 
@@ -25,7 +25,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define OPENEPHYSFILESOURCE_H_INCLUDED
 
 #include <FileSourceHeaders.h>
-
 
 /**
 
@@ -39,28 +38,27 @@ is what is loaded into the File Reader.
 class OpenEphysFileSource : public FileSource
 {
 public:
-    
     /** Constructor */
     OpenEphysFileSource();
-    
+
     /** Destructor */
-    ~OpenEphysFileSource() { }
-    
+    ~OpenEphysFileSource() {}
+
     /** Attempt to open a file, and return true if successful */
     bool open(File file) override;
-    
+
     /** Add info about available recordings */
     void fillRecordInfo() override;
 
     /** Read in nSamples to a temporary buffer of int16*/
-    int readData(int16* buffer, int nSamples) override;
+    int readData(int16 *buffer, int nSamples) override;
 
     /** Seek to a specific sample number */
     void seekTo(int64 sample) override;
 
     /** Convert input buffer of ints to a float output buffer */
-    void processChannelData(int16* inBuffer, float* outBuffer, int channel, int64 numSamples) override;
-    
+    void processChannelData(int16 *inBuffer, float *outBuffer, int channel, int64 numSamples) override;
+
     /** Add info about events occurring in an interval */
     void processEventData(EventInfo &info, int64 startTimestamp, int64 stopTimestamp) override;
 
@@ -68,9 +66,8 @@ public:
     void updateActiveRecord(int index) override;
 
 private:
-
     /** Helper function for reading in int16 data */
-    void readSamples(int16* buffer, int64 samplesToRead);
+    void readSamples(int16 *buffer, int64 samplesToRead);
 
     struct ChannelInfo
     {
@@ -118,7 +115,6 @@ private:
 
     const unsigned int EVENT_HEADER_SIZE_IN_BYTES = 1024;
     const unsigned int BYTES_PER_EVENT = 16;
-    
 };
 
 #endif

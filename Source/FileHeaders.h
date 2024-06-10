@@ -2,7 +2,7 @@
 	------------------------------------------------------------------
 
 	This file is part of the Open Ephys GUI
-	Copyright (C) 2022 Open Ephys
+	Copyright (C) 2024 Open Ephys
 
 	------------------------------------------------------------------
 
@@ -31,29 +31,29 @@
 
 #include "Definitions.h"
 
-String getFormatDescription(const ChannelInfoObject* ch)
+String getFormatDescription(const ChannelInfoObject *ch)
 {
 	if (ch->getType() == InfoObject::Type::EVENT_CHANNEL)
 	{
 		return "header.description = 'each record contains one 64-bit timestamp, "
-			"one 16-bit sample position, one uint8 event type, one uint8 processor ID, "
-			"one uint8 event ID, one uint8 event channel, and one uint16 recordingNumber'; \n";
+			   "one 16-bit sample position, one uint8 event type, one uint8 processor ID, "
+			   "one uint8 event ID, one uint8 event channel, and one uint16 recordingNumber'; \n";
 	}
 	else if (ch->getType() == InfoObject::Type::CONTINUOUS_CHANNEL)
 	{
 		return "header.description = 'each record contains one 64-bit timestamp, "
-			"one 16-bit sample count (N), 1 uint16 recordingNumber, N 16-bit samples, "
-			"and one 10-byte record marker (0 1 2 3 4 5 6 7 8 255)'; \n";
+			   "one 16-bit sample count (N), 1 uint16 recordingNumber, N 16-bit samples, "
+			   "and one 10-byte record marker (0 1 2 3 4 5 6 7 8 255)'; \n";
 	}
 	else if (ch->getType() == InfoObject::Type::SPIKE_CHANNEL)
 	{
 		return "header.description = 'Each record contains 1 uint8 eventType, 1 int64 timestamp, 1 int64 software timestamp, "
-			"1 uint16 sourceID, 1 uint16 numChannels (n), 1 uint16 numSamples (m), 1 uint16 sortedID, 1 uint16 electrodeID, "
-			"1 uint16 channel, 3 uint8 color codes, 2 float32 component projections, n*m uint16 samples, n float32 channelGains, n uint16 thresholds, and 1 uint16 recordingNumber'; \n";
+			   "1 uint16 sourceID, 1 uint16 numChannels (n), 1 uint16 numSamples (m), 1 uint16 sortedID, 1 uint16 electrodeID, "
+			   "1 uint16 channel, 3 uint8 color codes, 2 float32 component projections, n*m uint16 samples, n float32 channelGains, n uint16 thresholds, and 1 uint16 recordingNumber'; \n";
 	}
 }
 
-String getEventChannelHeaderText(const ChannelInfoObject* ch)
+String getEventChannelHeaderText(const ChannelInfoObject *ch)
 {
 
 	String header = "";
@@ -68,7 +68,7 @@ String getEventChannelHeaderText(const ChannelInfoObject* ch)
 	return header;
 }
 
-String getContinuousChannelHeaderText(const ChannelInfoObject* ch)
+String getContinuousChannelHeaderText(const ChannelInfoObject *ch)
 {
 	String header = "";
 
@@ -84,14 +84,13 @@ String getContinuousChannelHeaderText(const ChannelInfoObject* ch)
 	header += ";\n";
 
 	header += "header.bitVolts = ";
-	header += String(dynamic_cast<const ContinuousChannel*>(ch)->getBitVolts());
+	header += String(dynamic_cast<const ContinuousChannel *>(ch)->getBitVolts());
 	header += ";\n";
 
 	return header;
-
 }
 
-String getSpikeChannelHeaderText(const SpikeChannel* ch)
+String getSpikeChannelHeaderText(const SpikeChannel *ch)
 {
 	String header = "";
 
@@ -112,10 +111,9 @@ String getSpikeChannelHeaderText(const SpikeChannel* ch)
 	header += ";\n";
 
 	return header;
-
 }
 
-String generateHeader(const ChannelInfoObject* ch, String dateString)
+String generateHeader(const ChannelInfoObject *ch, String dateString)
 {
 	String header = "header.format = 'Open Ephys Data Format'; \n";
 
@@ -139,14 +137,13 @@ String generateHeader(const ChannelInfoObject* ch, String dateString)
 		header += getContinuousChannelHeaderText(ch);
 		break;
 	case InfoObject::Type::SPIKE_CHANNEL:
-		header += getSpikeChannelHeaderText((const SpikeChannel*) ch);
+		header += getSpikeChannelHeaderText((const SpikeChannel *)ch);
 		break;
 	}
 
 	header = header.paddedRight(' ', HEADER_SIZE);
 
 	return header;
-
 }
 
 #endif
