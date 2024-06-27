@@ -30,7 +30,7 @@
 #define VERSION 0.6
 
 #define VSTR(s) #s
-#define VSTR2(s) VSTR(s)
-#define VERSION_STRING VSTR2(VERSION)
+#define VSTR2(s) VSTR (s)
+#define VERSION_STRING VSTR2 (VERSION)
 
 #endif

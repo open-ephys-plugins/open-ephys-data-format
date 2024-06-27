@@ -23,65 +23,65 @@
 
 #include <PluginInfo.h>
 
-#include "OpenEphysFormat.h"
 #include "OpenEphysFileSource.h"
+#include "OpenEphysFormat.h"
 
 #include <string>
 
 #ifdef WIN32
 #include <Windows.h>
-#define EXPORT __declspec(dllexport)
+#define EXPORT __declspec (dllexport)
 #else
-#define EXPORT __attribute__((visibility("default")))
+#define EXPORT __attribute__ ((visibility ("default")))
 #endif
 
 using namespace Plugin;
 
 #define NUM_PLUGINS 2 // Number of Record Engines included
 
-extern "C" EXPORT void getLibInfo(Plugin::LibraryInfo *info)
+extern "C" EXPORT void getLibInfo (Plugin::LibraryInfo* info)
 {
-	/* API version, defined by the GUI source.
+    /* API version, defined by the GUI source.
 	Should not be changed to ensure it is always equal to the one used in the latest codebase.
 	The GUI refuses to load plugins with mismatched API versions */
-	info->apiVersion = PLUGIN_API_VER;
-	info->name = "Open Ephys Data Format";
-	info->libVersion = "0.6.2";
-	info->numPlugins = NUM_PLUGINS;
+    info->apiVersion = PLUGIN_API_VER;
+    info->name = "Open Ephys Data Format";
+    info->libVersion = "0.6.2";
+    info->numPlugins = NUM_PLUGINS;
 }
 
-extern "C" EXPORT int getPluginInfo(int index, Plugin::PluginInfo *info)
+extern "C" EXPORT int getPluginInfo (int index, Plugin::PluginInfo* info)
 {
-	switch (index)
-	{
-	case 0:
+    switch (index)
+    {
+        case 0:
 
-		info->type = Plugin::Type::RECORD_ENGINE;
-		info->recordEngine.name = "Open Ephys";
-		info->recordEngine.creator = &(Plugin::createRecordEngine<OpenEphysFormat>);
-		break;
+            info->type = Plugin::Type::RECORD_ENGINE;
+            info->recordEngine.name = "Open Ephys";
+            info->recordEngine.creator = &(Plugin::createRecordEngine<OpenEphysFormat>);
+            break;
 
-	case 1:
+        case 1:
 
-		info->type = Plugin::Type::FILE_SOURCE;
-		info->fileSource.name = "Open Ephys Format";
-		info->fileSource.creator = &(Plugin::createFileSource<OpenEphysFileSource>);
-		info->fileSource.extensions = "openephys";
-		break;
+            info->type = Plugin::Type::FILE_SOURCE;
+            info->fileSource.name = "Open Ephys Format";
+            info->fileSource.creator = &(Plugin::createFileSource<OpenEphysFileSource>);
+            info->fileSource.extensions = "openephys";
+            break;
 
-	default:
-		return -1;
-		break;
-	}
-	return 0;
+        default:
+            return -1;
+            break;
+    }
+    return 0;
 }
 
 #ifdef WIN32
-BOOL WINAPI DllMain(IN HINSTANCE hDllHandle,
-					IN DWORD nReason,
-					IN LPVOID Reserved)
+BOOL WINAPI DllMain (IN HINSTANCE hDllHandle,
+                     IN DWORD nReason,
+                     IN LPVOID Reserved)
 {
-	return TRUE;
+    return TRUE;
 }
 
 #endif

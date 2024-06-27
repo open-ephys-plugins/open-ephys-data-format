@@ -45,29 +45,29 @@ public:
     ~OpenEphysFileSource() {}
 
     /** Attempt to open a file, and return true if successful */
-    bool open(File file) override;
+    bool open (File file) override;
 
     /** Add info about available recordings */
     void fillRecordInfo() override;
 
     /** Read in nSamples to a temporary buffer of int16*/
-    int readData(int16 *buffer, int nSamples) override;
+    int readData (int16* buffer, int nSamples) override;
 
     /** Seek to a specific sample number */
-    void seekTo(int64 sample) override;
+    void seekTo (int64 sample) override;
 
     /** Convert input buffer of ints to a float output buffer */
-    void processChannelData(int16 *inBuffer, float *outBuffer, int channel, int64 numSamples) override;
+    void processChannelData (int16* inBuffer, float* outBuffer, int channel, int64 numSamples) override;
 
     /** Add info about events occurring in an interval */
-    void processEventData(EventInfo &info, int64 startTimestamp, int64 stopTimestamp) override;
+    void processEventData (EventInfo& info, int64 startTimestamp, int64 stopTimestamp) override;
 
     /** Update the current recording to read from */
-    void updateActiveRecord(int index) override;
+    void updateActiveRecord (int index) override;
 
 private:
     /** Helper function for reading in int16 data */
-    void readSamples(int16 *buffer, int64 samplesToRead);
+    void readSamples (int16* buffer, int64 samplesToRead);
 
     struct ChannelInfo
     {
