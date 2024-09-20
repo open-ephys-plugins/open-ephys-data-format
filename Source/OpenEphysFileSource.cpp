@@ -81,7 +81,7 @@ bool OpenEphysFileSource::open (File file)
 
                             int16* recordingNum = static_cast<int16*> (timestampFileMap->getData()) + 512 + 5;
 
-                            int64* startTimestamp = reinterpret_cast<int64*> (recordingNum - 5);
+                            int64* startSampleNumber = reinterpret_cast<int64*> (recordingNum - 5);
 
                             int count = 0;
                             if (*recordingNum != recording.id - 1)
@@ -90,11 +90,11 @@ bool OpenEphysFileSource::open (File file)
                                 while (*recordingNum < recording.id - 1)
                                     recordingNum += 1035;
 
-                                // Get the start timestamp for the current recording
-                                startTimestamp = reinterpret_cast<int64*> (recordingNum - 5);
+                                // Get the start sampleNumber for the current recording
+                                startSampleNumber = reinterpret_cast<int64*> (recordingNum - 5);
                             }
 
-                            streamInfo.startTimestamp = *startTimestamp;
+                            streamInfo.startSampleNumber = *startSampleNumber;
                             recording.streams[streamName] = streamInfo;
                         }
 
@@ -179,7 +179,7 @@ bool OpenEphysFileSource::open (File file)
 
                             for (int i = 0; i < nEvents; i++)
                             {
-                                int64* timestamp = static_cast<int64*> (eventFileMap->getData()) + EVENT_HEADER_SIZE_IN_BYTES / 8 + i * sizeof (int64) / 4;
+                                int64* sampleNumber = static_cast<int64*> (eventFileMap->getData()) + EVENT_HEADER_SIZE_IN_BYTES / 8 + i * sizeof (int64) / 4;
                                 uint8* eventType = static_cast<uint8*> (eventFileMap->getData()) + EVENT_HEADER_SIZE_IN_BYTES + i * BYTES_PER_EVENT + 10;
                                 uint8* sourceID = static_cast<uint8*> (eventFileMap->getData()) + EVENT_HEADER_SIZE_IN_BYTES + i * BYTES_PER_EVENT + 11;
                                 uint8* channelState = static_cast<uint8*> (eventFileMap->getData()) + EVENT_HEADER_SIZE_IN_BYTES + i * BYTES_PER_EVENT + 12;
@@ -189,8 +189,8 @@ bool OpenEphysFileSource::open (File file)
                                 eventInfo.channels.push_back (*channel);
                                 eventInfo.channelStates.push_back (*channelState);
 
-                                // Correct event timestamp offsets based on the current recording number
-                                int64 offset = recordings[1].streams[streamName].startTimestamp;
+                                // Correct event sampleNumber offsets based on the current recording number
+                                int64 offset = recordings[1].streams[streamName].startSampleNumber;
                                 if (*recordingNum > 0)
                                 {
                                     int numRecordings = *recordingNum + 1;
@@ -198,12 +198,12 @@ bool OpenEphysFileSource::open (File file)
                                     {
                                         Recording curr = recordings[numRecordings];
                                         Recording prev = recordings[numRecordings - 1];
-                                        offset += curr.streams[streamName].startTimestamp - (prev.streams[streamName].numSamples + prev.streams[streamName].startTimestamp);
+                                        offset += curr.streams[streamName].startSampleNumber - (prev.streams[streamName].numSamples + prev.streams[streamName].startSampleNumber);
                                         numRecordings--;
                                     }
                                 }
 
-                                eventInfo.timestamps.push_back (*timestamp - offset);
+                                eventInfo.sampleNumbers.push_back (*sampleNumber - offset);
                             }
 
                             eventInfoMap[streamName] = eventInfo;
@@ -286,7 +286,7 @@ void OpenEphysFileSource::seekTo (int64 sample)
     m_samplePos = sample % getActiveNumSamples();
 }
 
-int OpenEphysFileSource::readData (int16* buffer, int nSamples)
+int OpenEphysFileSource::readData (float* buffer, int nSamples)
 {
     int64 samplesToRead = nSamples;
 
@@ -301,6 +301,7 @@ int OpenEphysFileSource::readData (int16* buffer, int nSamples)
     return samplesToRead;
 }
 
+/* DEPRECATED
 void OpenEphysFileSource::processChannelData (int16* inBuffer, float* outBuffer, int channel, int64 numSamples)
 {
     // Convert data from inBuffer to outBuffer based on numSamples for each channel
@@ -312,6 +313,7 @@ void OpenEphysFileSource::processChannelData (int16* inBuffer, float* outBuffer,
         *(outBuffer + i) = (lobyte | hibyte) * bitVolts[channel];
     }
 }
+*/
 
 void OpenEphysFileSource::processEventData (EventInfo& eventInfo, int64 start, int64 stop)
 {
@@ -326,22 +328,24 @@ void OpenEphysFileSource::processEventData (EventInfo& eventInfo, int64 start, i
 
     int i = 0;
 
-    while (i < info.timestamps.size())
+    while (i < info.sampleNumbers.size())
     {
-        if (info.timestamps[i] >= local_start && info.timestamps[i] <= local_stop)
+        if (info.sampleNumbers[i] >= local_start && info.sampleNumbers[i] <= local_stop)
         {
             eventInfo.channels.push_back (info.channels[i]);
             eventInfo.channelStates.push_back ((info.channelStates[i]));
-            eventInfo.timestamps.push_back (info.timestamps[i] + loop_count * getActiveNumSamples());
+            eventInfo.sampleNumbers.push_back (info.sampleNumbers[i] + loop_count * getActiveNumSamples());
         }
         i++;
     }
 };
 
-void OpenEphysFileSource::readSamples (int16* buffer, int64 samplesToRead)
+void OpenEphysFileSource::readSamples (float* buffer, int64 samplesToRead)
 {
     /* Organize samples into a vector that mimics BinaryFormat */
     std::vector<int16> samples;
+
+    int nSamples = samplesToRead;
 
     /* Read rest of previous block */
     if (samplesLeftInBlock > 0)
@@ -382,5 +386,15 @@ void OpenEphysFileSource::readSamples (int16* buffer, int64 samplesToRead)
         samplesLeftInBlock = 1024 - samplesToRead;
     }
 
-    memcpy (buffer, &samples[0], samples.size() * sizeof (int16));
+    // memcpy (buffer, &samples[0], samples.size() * sizeof (int16));
+
+    for (int chan = 0; chan < numActiveChannels; chan++)
+    {
+        for (int i = 0; i < nSamples; i++)
+        {
+            int16 hibyte = (*(samples.data() + (numActiveChannels * i) + chan) & 0x00ff) << 8;
+            int16 lobyte = (*(samples.data() + (numActiveChannels * i) + chan) & 0xff00) >> 8;
+            *(buffer + i * numActiveChannels + chan) = (lobyte | hibyte) * bitVolts[chan];
+        }
+    }
 }
