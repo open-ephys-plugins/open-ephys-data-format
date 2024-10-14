@@ -68,6 +68,7 @@ bool OpenEphysFileSource::open (File file)
                     {
                         info.name = channel->getStringAttribute ("name");
                         info.bitVolts = channel->getStringAttribute ("bitVolts").getDoubleValue();
+                        info.type = channel->getIntAttribute ("type");
                         info.startPos = channel->getIntAttribute ("position");
 
                         if (! recording.streams.count (streamName))
@@ -241,6 +242,7 @@ void OpenEphysFileSource::fillRecordInfo()
 
             cInfo.name = recordings[recordingNum].streams[streamName].channels[i].name;
             cInfo.bitVolts = recordings[recordingNum].streams[streamName].channels[i].bitVolts;
+            cInfo.type = recordings[recordingNum].streams[streamName].channels[i].type;
 
             info.channels.add (cInfo);
         }

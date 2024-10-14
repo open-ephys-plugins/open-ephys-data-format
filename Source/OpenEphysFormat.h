@@ -176,6 +176,7 @@ private:
         String name;
         String filename;
         float bitVolts;
+        uint8 type;
         long int startPos;
     };
 

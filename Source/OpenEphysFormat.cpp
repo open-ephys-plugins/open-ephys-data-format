@@ -810,6 +810,7 @@ void OpenEphysFormat::writeXml()
             XmlElement* channelXml = new XmlElement ("CHANNEL");
             channelXml->setAttribute ("name", channelInfo->name);
             channelXml->setAttribute ("bitVolts", channelInfo->bitVolts);
+            channelXml->setAttribute ("type", static_cast<int>(channelInfo->type));
             channelXml->setAttribute ("filename", channelInfo->filename);
             channelXml->setAttribute ("position", (double) (channelInfo->startPos)); // As long as the file doesnt exceed 2^53 bytes, this will have integer precission. Better than limiting to 32bits.
             streamXml->addChildElement (channelXml);

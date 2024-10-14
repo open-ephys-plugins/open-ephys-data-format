@@ -71,6 +71,7 @@ private:
         int id;
         String name;
         double bitVolts;
+        uint8 type;
         String filename;
         long int startPos;
     };
