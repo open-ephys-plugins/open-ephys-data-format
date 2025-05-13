@@ -27,7 +27,7 @@
 #define HEADER_SIZE 1024
 #define BLOCK_LENGTH 1024
 
-#define VERSION 0.6
+#define VERSION 1.0
 
 #define VSTR(s) #s
 #define VSTR2(s) VSTR (s)
