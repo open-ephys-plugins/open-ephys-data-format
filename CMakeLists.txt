@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.5.0)
+cmake_minimum_required(VERSION 3.15)
 if(NOT DEFINED GUI_BASE_DIR)
   if(DEFINED ENV{GUI_BASE_DIR})
     set(GUI_BASE_DIR $ENV{GUI_BASE_DIR})
@@ -106,7 +106,7 @@ elseif(LINUX)
     APPEND_STRING
     PROPERTY
       LINK_FLAGS
-      "-fvisibility=hidden -fPIC -rdynamic -Wl,-rpath='$ORIGIN/../shared' -Wl,-rpath='$ORIGIN/../shared-api9'"
+      "-fvisibility=hidden -fPIC -rdynamic -Wl,-rpath='$ORIGIN/../shared' -Wl,-rpath='$ORIGIN/../shared-api10'"
   )
   target_compile_options(${PLUGIN_NAME} PRIVATE -fPIC -rdynamic)
   target_compile_options(${PLUGIN_NAME} PRIVATE -O3) # enable optimization for
@@ -120,13 +120,13 @@ elseif(APPLE)
     APPEND_STRING
     PROPERTY
       LINK_FLAGS
-      "-undefined dynamic_lookup -rpath @loader_path/../../../../shared-api9")
+      "-undefined dynamic_lookup -rpath @loader_path/../../../../shared-api10")
 
   target_compile_options(${PLUGIN_NAME} PRIVATE -Wno-everything)
 
   install(
     TARGETS ${PLUGIN_NAME}
-    DESTINATION $ENV{HOME}/Library/Application\ Support/open-ephys/plugins-api9)
+    DESTINATION $ENV{HOME}/Library/Application\ Support/open-ephys/plugins-api10)
   set(CMAKE_PREFIX_PATH /opt/local)
 endif()
 
